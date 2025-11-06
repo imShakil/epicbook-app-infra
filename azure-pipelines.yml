@@ -1,0 +1,132 @@
+trigger: none
+
+pool:
+  name: 'aws-ubuntu'
+
+stages:
+  - stage: terraformAction
+    jobs:
+      - job: terraformAction
+        workspace:
+          clean: all
+        variables: 
+          - group: terraform-variables
+          - group: aws-credentials
+        steps:
+
+          - script: |
+              aws configure set aws_access_key_id $(AWS_ACCESS_KEY_ID)
+              aws configure set aws_secret_access_key $(AWS_SECRET_ACCESS_KEY)
+              aws configure set default.region $(AWS_REGION)
+            displayName: 'AWS configure'
+            workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+          - script: |
+              echo "Verify terraform files"
+              ls -la
+            displayName: 'Verify terraform files'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          
+          - task: DownloadSecureFile@1
+            inputs:
+              secureFile: 'id_rsa.pub'
+            displayName: 'Download ssh public key'
+
+          - script: |
+              echo "Copying SSH public key into Terraform module"
+              rm -rf ~/.ssh/
+              mkdir -p ~/.ssh
+              cp $(download_ssh_key.secureFilePath) ~/.ssh/id_rsa.pub
+              ls -la ~/.ssh/
+            displayName: 'Extract SSH Public Key for Terraform'
+
+          - script: |
+              cat > terraform.tfvars << EOF
+              prefix             = "$(TF_PREFIX)"
+              rds_admin          = "$(TF_RDS_ADMIN)"
+              rds_admin_password = "$(TF_RDS_PASSWORD)"
+              EOF
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+            displayName: 'Create terraform.tfvars'
+
+          - script: |
+              echo "Terraform init"
+              terraform init
+            displayName: 'Terraform init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          - script: |
+              echo "Terraform plan"
+              terraform plan -out=tfplan
+            displayName: 'Terraform plan'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          - script: |
+              echo "Terraform apply"
+              terraform apply -auto-approve tfplan
+            displayName: 'Terraform apply'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform/terraform.tfstate'
+              artifact: 'terraform.tfstate'
+            displayName: 'Publish terraform.tfstate'
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform/terraform.tfvars'
+              artifact: 'terraform.tfvars'
+            displayName: 'Publish terraform.tfvars'
+        
+  - stage: ManualDestroy
+    dependsOn: terraformAction
+    condition: and(succeeded('terraformAction'), eq(variables['MANUAL_DESTROY'], 'true'))
+
+    jobs:
+      - job: ManualDestroy
+        workspace:
+          clean: all
+        variables: 
+          - group: terraform-variables
+          - group: aws-credentials
+        steps:
+          - script: |
+              aws configure set aws_access_key_id $(AWS_ACCESS_KEY_ID)
+              aws configure set aws_secret_access_key $(AWS_SECRET_ACCESS_KEY)
+              aws configure set default.region $(AWS_REGION)
+            displayName: 'AWS configure'
+            workingDirectory: '$(System.DefaultWorkingDirectory)'
+          - script: |
+              echo "Verify terraform files"
+              ls -la
+            displayName: 'Verify terraform files'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifactName: 'terraform.tfstate'
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+            displayName: 'Download terraform.tfstate'
+
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifactName: 'terraform.tfvars'
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+            displayName: 'Download terraform.tfvars'
+
+          - script: |
+              echo "Terraform init"
+              terraform init
+            displayName: 'Terraform init'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+
+          - script: |
+              echo "Terraform destroy"
+              terraform destroy -auto-approve
+            displayName: 'Terraform destroy'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+          
+          - script: |
+              echo "cleanup"
+              rm -rf ~/.ssh/id_rsa.pub
+              rm -f ~/.aws/credentials ~/.aws/config
+              rm -rf $(System.DefaultWorkingDirectory)/*
+            displayName: 'Cleanup workspace'
