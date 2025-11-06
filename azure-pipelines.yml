@@ -92,14 +92,11 @@ stages:
                   displayName: 'AWS configure'
                   workingDirectory: '$(System.DefaultWorkingDirectory)'
      
-                - script: |
-                    cat > terraform.tfvars << EOF
-                    prefix             = "$(TF_PREFIX)"
-                    db_admin           = "$(TF_RDS_ADMIN)"
-                    db_admin_password  = "$(TF_RDS_PASSWORD)"
-                    EOF
-                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-                  displayName: 'Create terraform.tfvars'
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    artifactName: 'terraform.tfvars'
+                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+                  displayName: 'Download Terraform vars'
 
                 - script: |
                     echo "Verify terraform files"
