@@ -46,7 +46,7 @@ stages:
               cat > terraform.tfvars << EOF
               prefix             = "$(TF_PREFIX)"
               db_admin           = "$(TF_RDS_ADMIN)"
-              db_admin_password  = "$(TF_RDS_PASSWORD)"
+              db_admin_password  = "$(TF_RDS_ADMIN_PASSWORD)"
               EOF
             workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
             displayName: 'Create terraform.tfvars'
