@@ -29,9 +29,9 @@ stages:
             workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
           
           - task: DownloadSecureFile@1
+            name: download_ssh_key
             inputs:
               secureFile: 'id_rsa.pub'
-            displayName: 'Download ssh public key'
 
           - script: |
               echo "Copying SSH public key into Terraform module"
