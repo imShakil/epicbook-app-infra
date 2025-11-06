@@ -77,21 +77,18 @@ stages:
     dependsOn: terraformAction
     condition: succeeded('terraformAction')
     jobs:
-      - deployment: ManualDestroy       
-        workspace:
-          clean: all
-        environment: ManualDestroy
-        strategy: 
+       - deployment: approveDestroy
+         environment: 'ManualDestroy'
+         strategy:
           runOnce:
             deploy:
               steps:
                 - script: |
                     aws configure set aws_access_key_id $(AWS_ACCESS_KEY_ID)
                     aws configure set aws_secret_access_key $(AWS_SECRET_ACCESS_KEY)
-                    aws configure set default.region $(AWS_REGION)
-                  displayName: 'AWS configure'
-                  workingDirectory: '$(System.DefaultWorkingDirectory)'
-     
+                    aws configure set region $(AWS_DEFAULT_REGION)
+                  displayName: 'Configure AWS CLI'
+                
                 - task: DownloadPipelineArtifact@2
                   inputs:
                     artifactName: 'terraform.tfvars'
@@ -99,27 +96,15 @@ stages:
                   displayName: 'Download Terraform vars'
 
                 - script: |
-                    echo "Verify terraform files"
                     ls -la
-                  displayName: 'Verify terraform files'
-                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-            
-                - script: |
-                    echo "Terraform init"
-                    terraform init
-                  displayName: 'Terraform init'
-                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-
-                - script: |
-                    echo "Terraform destroy"
+                    terraform init -upgrade
                     terraform destroy -auto-approve
-                  displayName: 'Terraform destroy'
                   workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-                
+                  displayName: 'Manual Destroy'
+
                 - script: |
                     echo "cleanup"
                     rm -rf ~/.ssh/id_rsa.pub
                     rm -f ~/.aws/credentials ~/.aws/config
                     rm -rf $(System.DefaultWorkingDirectory)/*
                   displayName: 'Cleanup workspace'
-
