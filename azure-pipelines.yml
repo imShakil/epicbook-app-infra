@@ -4,15 +4,16 @@ trigger:
 pool:
   name: 'aws-ubuntu'
 
+variables: 
+  - group: terraform-variables
+  - group: aws-credentials
+
 stages:
   - stage: terraformAction
     jobs:
       - job: terraformAction
         workspace:
           clean: all
-        variables: 
-          - group: terraform-variables
-          - group: aws-credentials
         steps:
 
           - script: |
@@ -68,11 +69,6 @@ stages:
           
           - task: PublishPipelineArtifact@1
             inputs:
-              targetPath: '$(System.DefaultWorkingDirectory)/terraform/terraform.tfstate'
-              artifact: 'terraform.tfstate'
-            displayName: 'Publish terraform.tfstate'
-          - task: PublishPipelineArtifact@1
-            inputs:
               targetPath: '$(System.DefaultWorkingDirectory)/terraform/terraform.tfvars'
               artifact: 'terraform.tfvars'
             displayName: 'Publish terraform.tfvars'
@@ -95,24 +91,22 @@ stages:
                     aws configure set default.region $(AWS_REGION)
                   displayName: 'AWS configure'
                   workingDirectory: '$(System.DefaultWorkingDirectory)'
+     
+                - script: |
+                    cat > terraform.tfvars << EOF
+                    prefix             = "$(TF_PREFIX)"
+                    db_admin           = "$(TF_RDS_ADMIN)"
+                    db_admin_password  = "$(TF_RDS_PASSWORD)"
+                    EOF
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+                  displayName: 'Create terraform.tfvars'
+
                 - script: |
                     echo "Verify terraform files"
                     ls -la
                   displayName: 'Verify terraform files'
                   workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-                
-                - task: DownloadPipelineArtifact@2
-                  inputs:
-                    artifactName: 'terraform.tfstate'
-                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
-                  displayName: 'Download terraform.tfstate'
-
-                - task: DownloadPipelineArtifact@2
-                  inputs:
-                    artifactName: 'terraform.tfvars'
-                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
-                  displayName: 'Download terraform.tfvars'
-
+            
                 - script: |
                     echo "Terraform init"
                     terraform init
